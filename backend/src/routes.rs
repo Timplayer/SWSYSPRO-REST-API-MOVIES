@@ -22,13 +22,9 @@ async fn get_movies(db: web::Data<Mutex<Client>>) -> impl Responder {
 #[post("/movies")]
 async fn post_movies(db: web::Data<Mutex<Client>>, movie: web::Json<MovieInput>,) -> impl Responder {
 
-    let client = match db.lock() {
-        Ok(client) => client,
-        Err(poisoned) => poisoned.into_inner(),
-    };
+    let client = db.lock().unwrap();
 
-    let statement = client.prepare("INSERT INTO movies (name) VALUES ($1) RETURNING id, name").await.unwrap();
-    match client.query_one(&statement, &[&movie.name]).await {
+    match client.query_one("INSERT INTO movies (name) VALUES ($1) RETURNING id, name", &[&movie.name]).await {
         Ok(row) => {
             let movie = Movie {
                 id: Some(row.get(0)),
@@ -36,18 +32,12 @@ async fn post_movies(db: web::Data<Mutex<Client>>, movie: web::Json<MovieInput>,
             };
             HttpResponse::Created().json(movie)
         },
-        Err(_) => {
-            HttpResponse::InternalServerError().finish()
-        },
+        Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
 
-
 #[get("/movies/id/{id}")]
-pub async fn get_movie_by_id(
-    db: web::Data<Mutex<Client>>,
-    path: web::Path<(i32,)>
-) -> impl Responder {
+pub async fn get_movie_by_id(db: web::Data<Mutex<Client>>, path: web::Path<(i32,)>) -> impl Responder {
 
     let id = path.into_inner().0;
     let client = db.lock().unwrap();
@@ -65,16 +55,12 @@ pub async fn get_movie_by_id(
 }
 
 #[get("/movies/name/{name}")]
-pub async fn get_movie_by_name(
-    db: web::Data<Mutex<Client>>,
-    path: web::Path<(String,)>
-) -> impl Responder {
+pub async fn get_movie_by_name(db: web::Data<Mutex<Client>>, path: web::Path<(String,)>) -> impl Responder {
+    
     let name = path.into_inner().0.to_lowercase();
     let client = db.lock().unwrap();
 
-    let query = "SELECT id, name FROM movies WHERE LOWER(name) = LOWER($1)";
-
-    match client.query(query, &[&name]).await {
+    match client.query("SELECT id, name FROM movies WHERE LOWER(name) = LOWER($1)", &[&name]).await {
         Ok(rows) => {
             let movies: Vec<Movie> = rows.iter().map(|row| Movie {
                 id: Some(row.get(0)),
@@ -92,10 +78,8 @@ pub async fn get_movie_by_name(
 }
 
 #[delete("/movies/id/{id}")]
-pub async fn delete_movie_by_id(
-    db: web::Data<Mutex<Client>>,
-    path: web::Path<(i32,)>
-) -> impl Responder {
+pub async fn delete_movie_by_id(db: web::Data<Mutex<Client>>, path: web::Path<(i32,)>) -> impl Responder {
+    
     let movie_id = path.into_inner().0;
     let client = db.lock().unwrap();
 
